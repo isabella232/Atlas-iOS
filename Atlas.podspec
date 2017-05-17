@@ -22,4 +22,5 @@ Pod::Spec.new do |s|
   s.ios.frameworks              = %w{ UIKit CoreLocation MobileCoreServices }
   s.ios.deployment_target       = '8.0'
   s.dependency                  'LayerKit', '>= 0.26.5'
+  s.dependency                  'GfycatKit'
 end

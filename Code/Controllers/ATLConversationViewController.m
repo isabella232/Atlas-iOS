@@ -32,8 +32,9 @@
 #import "ATLMediaAttachment.h"
 #import "ATLLocationManager.h"
 #import "LYRIdentity+ATLParticipant.h"
+#import <GfycatKit/GfycatKit.h>
 
-@interface ATLConversationViewController () <UICollectionViewDataSource, UICollectionViewDelegate, CLLocationManagerDelegate>
+@interface ATLConversationViewController () <UICollectionViewDataSource, UICollectionViewDelegate, CLLocationManagerDelegate, GFYBrowserDelegate>
 
 @property (nonatomic) ATLConversationDataSource *conversationDataSource;
 @property (nonatomic, readwrite) LYRQueryController *queryController;
@@ -51,6 +52,9 @@
 @property (nonatomic) BOOL canDisableAddressBar;
 @property (nonatomic) dispatch_queue_t animationQueue;
 @property (nonatomic) BOOL expandingPaginationWindow;
+
+@property (nonatomic) UINavigationController *gfycatNavigationViewController;
+@property (nonatomic) GFYBrowserViewController *gfycatBrowserViewController;
 
 @end
 
@@ -185,6 +189,13 @@ static NSInteger const ATLPhotoActionSheet = 1000;
     
     if (self.addressBarController && !self.addressBarController.isDisabled) {
         [self.addressBarController.addressBarView.addressBarTextView becomeFirstResponder];
+    }
+}
+
+- (void)viewWillDisappear:(BOOL)animated
+{
+    if (!self.gfycatNavigationViewController) {
+        [self gfycatDismiss];
     }
 }
 
@@ -594,6 +605,11 @@ static NSInteger const ATLPhotoActionSheet = 1000;
 
 - (void)messageInputToolbar:(ATLMessageInputToolbar *)messageInputToolbar didTapLeftAccessoryButton:(UIButton *)leftAccessoryButton
 {
+    if (self.gfycatBrowserViewController) {
+        [self gfycatDismiss];
+        return;
+    }
+
     if (messageInputToolbar.textInputView.isFirstResponder) {
         [messageInputToolbar.textInputView resignFirstResponder];
     }
@@ -602,10 +618,16 @@ static NSInteger const ATLPhotoActionSheet = 1000;
                                                              delegate:self
                                                     cancelButtonTitle:ATLLocalizedString(@"atl.conversation.toolbar.actionsheet.cancel.key", @"Cancel", nil)
                                                destructiveButtonTitle:nil
-                                                    otherButtonTitles:ATLLocalizedString(@"atl.conversation.toolbar.actionsheet.takephoto.key", @"Take Photo/Video", nil), ATLLocalizedString(@"atl.conversation.toolbar.actionsheet.lastphoto.key", @"Last Photo/Video", nil), ATLLocalizedString(@"atl.conversation.toolbar.actionsheet.library.key", @"Photo/Video Library", nil), nil];
+                                                    otherButtonTitles:ATLLocalizedString(@"atl.conversation.toolbar.actionsheet.gfycat.key", @"Gfycat", nil),
+                                                                      ATLLocalizedString(@"atl.conversation.toolbar.actionsheet.takephoto.key", @"Take Photo/Video", nil),
+                                                                      ATLLocalizedString(@"atl.conversation.toolbar.actionsheet.lastphoto.key", @"Last Photo/Video", nil),
+                                                                      ATLLocalizedString(@"atl.conversation.toolbar.actionsheet.library.key", @"Photo/Video Library", nil),
+                                                                      nil];
     [actionSheet showInView:self.view];
     actionSheet.tag = ATLPhotoActionSheet;
 }
+
+//
 
 - (void)messageInputToolbar:(ATLMessageInputToolbar *)messageInputToolbar didTapRightAccessoryButton:(UIButton *)rightAccessoryButton
 {
@@ -726,14 +748,18 @@ static NSInteger const ATLPhotoActionSheet = 1000;
     if (actionSheet.tag == ATLPhotoActionSheet) {
         switch (buttonIndex) {
             case 0:
-                [self displayImagePickerWithSourceType:UIImagePickerControllerSourceTypeCamera];
+                [self gfycatPresent];
                 break;
                 
             case 1:
-                [self captureLastPhotoTaken];
+                [self displayImagePickerWithSourceType:UIImagePickerControllerSourceTypeCamera];
                 break;
                 
             case 2:
+                [self captureLastPhotoTaken];
+                break;
+                
+            case 3:
                 [self displayImagePickerWithSourceType:UIImagePickerControllerSourceTypePhotoLibrary];
                 break;
                 
@@ -1402,6 +1428,110 @@ static NSInteger const ATLPhotoActionSheet = 1000;
     
     // Application State Notifications
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(handleApplicationDidBecomeActive:) name:UIApplicationDidBecomeActiveNotification object:nil];
+}
+
+#pragma mark - Gfycat
+
+- (void)gfycatPresent
+{
+    if (!self.gfycatBrowserViewController) {
+        self.gfycatBrowserViewController = [GFYBrowserViewController browserWithSettings:nil];
+        self.gfycatBrowserViewController.delegate = self;
+        [self addChildViewController:self.gfycatBrowserViewController];
+        self.messageInputToolbar.textInputView.inputView = self.gfycatBrowserViewController.view;
+        [self.messageInputToolbar.textInputView becomeFirstResponder];
+        [self.messageInputToolbar.textInputView reloadInputViews];
+        [self.gfycatBrowserViewController didMoveToParentViewController:self];
+    }
+}
+
+- (void)gfycatDismiss
+{
+    if (self.gfycatBrowserViewController) {
+        [self.gfycatBrowserViewController willMoveToParentViewController:nil];
+        self.messageInputToolbar.textInputView.inputView = nil;
+        [self.messageInputToolbar.textInputView reloadInputViews];
+        [self.gfycatBrowserViewController removeFromParentViewController];
+        self.gfycatBrowserViewController = nil;
+    }
+}
+
+- (void)gfycatExpand:(dispatch_block_t)completion
+{
+    NSParameterAssert(self.gfycatBrowserViewController);
+    if (self.gfycatNavigationViewController) {
+        if (completion) completion();
+        return;
+    }
+    [self.gfycatBrowserViewController willMoveToParentViewController:nil];
+    self.messageInputToolbar.textInputView.inputView = nil;
+    [self.messageInputToolbar.textInputView reloadInputViews];
+    [self.messageInputToolbar.textInputView resignFirstResponder];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self.gfycatBrowserViewController.view removeFromSuperview];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self.gfycatBrowserViewController removeFromParentViewController];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                GFYSimpleContainerViewController *containter = [[GFYSimpleContainerViewController alloc] init];
+                containter.activeViewController = self.gfycatBrowserViewController;
+                containter.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(gfycatCollapse)];
+                self.gfycatNavigationViewController = [[UINavigationController alloc] initWithRootViewController:containter];
+                [self presentViewController:self.gfycatNavigationViewController animated:YES completion:^{
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        completion();
+                    });
+                }];
+            });
+        });
+    });
+}
+
+- (void)gfycatCollapse:(dispatch_block_t)completion
+{
+    NSParameterAssert(self.gfycatBrowserViewController);
+    if (!self.gfycatNavigationViewController) {
+        if (completion) completion();
+        return;
+    }
+    [self.gfycatBrowserViewController cancelSearch];
+    [self.gfycatNavigationViewController dismissViewControllerAnimated:YES completion:^{
+        self.messageInputToolbar.textInputView.inputView = self.gfycatBrowserViewController.view;
+        [self.messageInputToolbar.textInputView becomeFirstResponder];
+        [self.messageInputToolbar.textInputView reloadInputViews];
+        if (completion) completion();
+        self.gfycatNavigationViewController = nil;
+    }];
+}
+
+- (void)gfycatCollapse
+{
+    [self gfycatCollapse:nil];
+}
+
+- (void)gfycatBrowser:(GFYBrowserViewController *)browser requestExpandedState:(BOOL)expanded completion:(void (^)(void))completion
+{
+    if (expanded) {
+        [self gfycatExpand:completion];
+    } else {
+        [self gfycatCollapse:completion];
+    }
+}
+
+- (void)gfycatMediaPicker:(GFYMediaPickerViewController *)picker didSelectMedia:(GfycatMedia *)media withSource:(id<GFYArraySource>)source
+{
+    __weak __typeof(self) weakSelf = self;
+    [self gfycatCollapse:^{
+        [self gfycatDismiss];
+        [[GfycatApi shared] downloadFileWithURL:media.gif2MbUrl completion:^(NSURLResponse *response, NSURL *filePath, NSError *error) {
+            __strong __typeof(self) strongSelf = weakSelf;
+            if (!strongSelf || !filePath) {
+                return;
+            }
+            ATLMediaAttachment *mediaAttachment = [ATLMediaAttachment mediaAttachmentWithFileURL:filePath thumbnailSize:ATLDefaultThumbnailSize];
+            [strongSelf.messageInputToolbar insertMediaAttachment:mediaAttachment withEndLineBreak:YES];
+            [strongSelf.messageInputToolbar.textInputView becomeFirstResponder];
+        }];
+    }];
 }
 
 @end

@@ -11,6 +11,8 @@ if !ENV['LAYER_USE_CORE_SDK_LOCATION'].blank? then
   pod 'LayerKit', path: ENV['LAYER_USE_CORE_SDK_LOCATION']
 end
 
+pod 'GfycatKit', :git => 'https://github.com/gfycat/GfycatKit.git'
+
 target 'Programmatic' do
   pod 'Atlas', path: '.'
 end
