@@ -16,11 +16,19 @@ Pod::Spec.new do |s|
   s.platform                    = :ios, '8.0'
 
   s.requires_arc                = true
-  s.source_files                = 'Code/**/*.{h,m}'
-  s.public_header_files         = 'Code/**/*.h'
-  s.ios.resource_bundle         = { 'AtlasResource' => 'Resources/*' }
-  s.ios.frameworks              = %w{ UIKit CoreLocation MobileCoreServices }
+  s.default_subspec             = 'Core'
   s.ios.deployment_target       = '8.0'
-  s.dependency                  'LayerKit', '>= 0.26.5'
-  s.dependency                  'GfycatKit'
+
+  s.subspec 'Core' do |ss|
+    ss.source_files             = 'Code/**/*.{h,m}'
+    ss.public_header_files      = 'Code/**/*.h'
+    ss.ios.resource_bundle      = { 'AtlasResource' => 'Resources/*' }
+    ss.ios.frameworks           = %w{ UIKit CoreLocation MobileCoreServices }
+    ss.dependency                  'LayerKit', '>= 0.26.5'
+  end
+
+  s.subspec 'Gfycat' do |ss|
+    ss.dependency               'Atlas/Core'
+    ss.dependency               'GfycatKit'
+  end
 end

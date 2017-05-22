@@ -32,9 +32,17 @@
 #import "ATLMediaAttachment.h"
 #import "ATLLocationManager.h"
 #import "LYRIdentity+ATLParticipant.h"
-#import <GfycatKit/GfycatKit.h>
 
-@interface ATLConversationViewController () <UICollectionViewDataSource, UICollectionViewDelegate, CLLocationManagerDelegate, GFYBrowserDelegate>
+#if __has_include(<GfycatKit/GfycatKit.h>)
+#import <GfycatKit/GfycatKit.h>
+#define HAS_GFYCAT 1
+#endif
+
+@interface ATLConversationViewController () <UICollectionViewDataSource, UICollectionViewDelegate, CLLocationManagerDelegate
+#if HAS_GFYCAT
+, GFYBrowserDelegate
+#endif
+>
 
 @property (nonatomic) ATLConversationDataSource *conversationDataSource;
 @property (nonatomic, readwrite) LYRQueryController *queryController;
@@ -53,8 +61,10 @@
 @property (nonatomic) dispatch_queue_t animationQueue;
 @property (nonatomic) BOOL expandingPaginationWindow;
 
+#if HAS_GFYCAT
 @property (nonatomic) UINavigationController *gfycatNavigationViewController;
 @property (nonatomic) GFYBrowserViewController *gfycatBrowserViewController;
+#endif
 
 @end
 
@@ -194,9 +204,11 @@ static NSInteger const ATLPhotoActionSheet = 1000;
 
 - (void)viewWillDisappear:(BOOL)animated
 {
+#if HAS_GFYCAT
     if (!self.gfycatNavigationViewController) {
         [self gfycatDismiss];
     }
+#endif
 }
 
 - (void)dealloc
@@ -605,10 +617,12 @@ static NSInteger const ATLPhotoActionSheet = 1000;
 
 - (void)messageInputToolbar:(ATLMessageInputToolbar *)messageInputToolbar didTapLeftAccessoryButton:(UIButton *)leftAccessoryButton
 {
+#if HAS_GFYCAT
     if (self.gfycatBrowserViewController) {
         [self gfycatDismiss];
         return;
     }
+#endif
 
     if (messageInputToolbar.textInputView.isFirstResponder) {
         [messageInputToolbar.textInputView resignFirstResponder];
@@ -618,11 +632,15 @@ static NSInteger const ATLPhotoActionSheet = 1000;
                                                              delegate:self
                                                     cancelButtonTitle:ATLLocalizedString(@"atl.conversation.toolbar.actionsheet.cancel.key", @"Cancel", nil)
                                                destructiveButtonTitle:nil
-                                                    otherButtonTitles:ATLLocalizedString(@"atl.conversation.toolbar.actionsheet.gfycat.key", @"Gfycat", nil),
-                                                                      ATLLocalizedString(@"atl.conversation.toolbar.actionsheet.takephoto.key", @"Take Photo/Video", nil),
-                                                                      ATLLocalizedString(@"atl.conversation.toolbar.actionsheet.lastphoto.key", @"Last Photo/Video", nil),
-                                                                      ATLLocalizedString(@"atl.conversation.toolbar.actionsheet.library.key", @"Photo/Video Library", nil),
-                                                                      nil];
+                                                    otherButtonTitles:
+#if HAS_GFYCAT
+                                  ATLLocalizedString(@"atl.conversation.toolbar.actionsheet.gfycat.key", @"Gfycat", nil),
+#endif
+                                  ATLLocalizedString(@"atl.conversation.toolbar.actionsheet.takephoto.key", @"Take Photo/Video", nil),
+                                  ATLLocalizedString(@"atl.conversation.toolbar.actionsheet.lastphoto.key", @"Last Photo/Video", nil),
+                                  ATLLocalizedString(@"atl.conversation.toolbar.actionsheet.library.key", @"Photo/Video Library", nil),
+                                  nil];
+
     [actionSheet showInView:self.view];
     actionSheet.tag = ATLPhotoActionSheet;
 }
@@ -745,21 +763,33 @@ static NSInteger const ATLPhotoActionSheet = 1000;
 
 - (void)actionSheet:(UIActionSheet *)actionSheet didDismissWithButtonIndex:(NSInteger)buttonIndex
 {
+    enum
+    {
+#if HAS_GFYCAT
+        ITEM_GFYCAT,
+#endif
+        ITEM_CAMERA,
+        ITEM_LAST_PHOTO,
+        ITEM_GALLERY,
+    };
+    
     if (actionSheet.tag == ATLPhotoActionSheet) {
         switch (buttonIndex) {
-            case 0:
+#if HAS_GFYCAT
+            case ITEM_GFYCAT:
                 [self gfycatPresent];
                 break;
-                
-            case 1:
+#endif
+
+            case ITEM_CAMERA:
                 [self displayImagePickerWithSourceType:UIImagePickerControllerSourceTypeCamera];
                 break;
                 
-            case 2:
+            case ITEM_LAST_PHOTO:
                 [self captureLastPhotoTaken];
                 break;
                 
-            case 3:
+            case ITEM_GALLERY:
                 [self displayImagePickerWithSourceType:UIImagePickerControllerSourceTypePhotoLibrary];
                 break;
                 
@@ -1430,6 +1460,7 @@ static NSInteger const ATLPhotoActionSheet = 1000;
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(handleApplicationDidBecomeActive:) name:UIApplicationDidBecomeActiveNotification object:nil];
 }
 
+#if HAS_GFYCAT
 #pragma mark - Gfycat
 
 - (void)gfycatPresent
@@ -1533,5 +1564,7 @@ static NSInteger const ATLPhotoActionSheet = 1000;
         }];
     }];
 }
+
+#endif // HAS_GFYCAT
 
 @end
