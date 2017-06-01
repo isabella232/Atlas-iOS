@@ -21,10 +21,15 @@
 #import "ATLConstants.h"
 #import "ATLMediaAttachment.h"
 #import "ATLMessagingUtilities.h"
+#import <MobileCoreServices/MobileCoreServices.h>
 
 NSString *const ATLMessageInputToolbarDidChangeHeightNotification = @"ATLMessageInputToolbarDidChangeHeightNotification";
 
 @interface ATLMessageInputToolbar () <UITextViewDelegate>
+{
+    NSString *_textAction;
+    NSRange _textActionRange;
+}
 
 @property (nonatomic) NSArray *mediaAttachments;
 @property (nonatomic, copy) NSAttributedString *attributedStringForMessageParts;
@@ -185,6 +190,18 @@ static CGFloat const ATLButtonHeight = 28.0f;
 
 - (void)paste:(id)sender
 {
+    NSData *gifData = [[UIPasteboard generalPasteboard] dataForPasteboardType:(__bridge NSString *)kUTTypeGIF];
+    if (gifData) {
+        NSURL *tmpDir = [NSURL fileURLWithPath:NSTemporaryDirectory()];
+        [[NSFileManager defaultManager] createDirectoryAtURL:tmpDir withIntermediateDirectories:YES attributes:nil error:nil];
+        NSURL *filePath = [tmpDir URLByAppendingPathComponent:@"paste.gif"];
+        [gifData writeToURL:filePath atomically:YES];
+        ATLMediaAttachment *mediaAttachment = [ATLMediaAttachment mediaAttachmentWithFileURL:filePath
+                                                                               thumbnailSize:ATLDefaultThumbnailSize];
+        [self insertMediaAttachment:mediaAttachment withEndLineBreak:YES];
+        return;
+    }
+
     NSData *imageData = [[UIPasteboard generalPasteboard] dataForPasteboardType:ATLPasteboardImageKey];
     if (imageData) {
         UIImage *image = [UIImage imageWithData:imageData];
@@ -192,6 +209,7 @@ static CGFloat const ATLButtonHeight = 28.0f;
                                                                                   metadata:nil
                                                                              thumbnailSize:ATLDefaultThumbnailSize];
         [self insertMediaAttachment:mediaAttachment withEndLineBreak:YES];
+        return;
     }
 }
 
@@ -339,6 +357,26 @@ static CGFloat const ATLButtonHeight = 28.0f;
 
 - (BOOL)textView:(UITextView *)textView shouldInteractWithTextAttachment:(NSTextAttachment *)textAttachment inRange:(NSRange)characterRange
 {
+    return YES;
+}
+
+- (BOOL)textView:(UITextView *)textView shouldChangeTextInRange:(NSRange)range replacementText:(NSString *)string
+{
+    if ([string hasPrefix:@"/"]) {
+        _textAction = [string copy];
+        _textActionRange = NSMakeRange(range.location, string.length);
+    } else if (_textAction) {
+        if (!string.length && NSEqualRanges(_textActionRange, range)) {
+            if ([_textAction isEqualToString:@"/paste"]) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [[textView targetForAction:@selector(paste:) withSender:nil] paste:nil];
+                });
+            }
+        }
+        _textAction = nil;
+        _textActionRange = NSMakeRange(0, 0);
+    }
+    
     return YES;
 }
 
