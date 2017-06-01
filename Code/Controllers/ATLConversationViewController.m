@@ -1466,7 +1466,10 @@ static NSInteger const ATLPhotoActionSheet = 1000;
 - (void)gfycatPresent
 {
     if (!self.gfycatBrowserViewController) {
-        self.gfycatBrowserViewController = [GFYBrowserViewController browserWithSettings:nil];
+        GFYBrowserSettings *settings = [[GFYBrowserSettings alloc] init];
+        settings.enableRecentItems = YES;
+        settings.showMediaCellControllsOnTap = NO;
+        self.gfycatBrowserViewController = [GFYBrowserViewController browserWithSettings:settings];
         self.gfycatBrowserViewController.delegate = self;
         [self addChildViewController:self.gfycatBrowserViewController];
         self.messageInputToolbar.textInputView.inputView = self.gfycatBrowserViewController.view;
